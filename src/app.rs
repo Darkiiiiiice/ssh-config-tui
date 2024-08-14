@@ -1,15 +1,16 @@
-use std::io;
+use crate::tui::TUI;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::Frame;
-use ratatui::layout::{Alignment, Rect, Layout, Direction, Flex, Constraint};
-use ratatui::prelude::{Color, Line, Modifier, Style, Stylize, Text, Widget};
+use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
+use ratatui::prelude::{Color, Line, Modifier, Style, Stylize, Widget};
 use ratatui::symbols::border;
-use ratatui::widgets::{Block, List, ListDirection, ListItem, Paragraph};
 use ratatui::widgets::block::{Position, Title};
-use crate::tui::TUI;
-
+use ratatui::widgets::{
+    Block, List, ListDirection, ListItem, ListState, Paragraph, StatefulWidget,
+};
+use ratatui::Frame;
+use std::io;
 
 #[derive(Debug, Default)]
 struct HostItem<'a> {
@@ -19,32 +20,24 @@ struct HostItem<'a> {
 
 impl<'a> HostItem<'a> {
     fn new(name: &'a str, domain: &'a str) -> Self {
-        Self {
-            name,
-            domain,
-        }
+        Self { name, domain }
     }
 
     fn to_list_item(&self, index: usize) -> ListItem {
-        ListItem::new(
-            Line::styled(format!(" ✓ {}", self.name), Color::Red)
-        )
+        ListItem::new(Line::styled(format!(" ✓ {}", self.name), Color::Red))
     }
 }
 
 impl<'a> From<&(&'a str, &'a str)> for HostItem<'a> {
     fn from((name, domain): &(&'a str, &'a str)) -> Self {
-        Self {
-            name,
-            domain,
-        }
+        Self { name, domain }
     }
 }
-
 
 #[derive(Debug, Default)]
 pub struct App<'a> {
     counter: u8,
+    state: ListState,
     hosts: Vec<HostItem<'a>>,
     exit: bool,
 }
@@ -66,82 +59,8 @@ impl App<'_> {
         Ok(())
     }
 
-    fn render_frame(&self, frame: &mut Frame) {
-        let outer_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![
-                Constraint::Percentage(100),
-            ])
-            .flex(Flex::Center)
-            .split(frame.area());
-
-
-        let inner_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(vec![
-                Constraint::Percentage(20),
-                Constraint::Percentage(80),
-            ])
-            .vertical_margin(1)
-            .horizontal_margin(1)
-            .flex(Flex::Start)
-            .split(outer_layout[0]);
-
-        let outer_title = Title::from("  SSH Config  ".green().bold());
-        let outer_block = Block::bordered()
-            .title(outer_title.alignment(Alignment::Center).position(Position::Top))
-            .border_set(border::ROUNDED);
-
-        let inner_left_title = Title::from(" Host ".green().bold());
-        let inner_left_block = Block::bordered()
-            .title(
-                inner_left_title
-                    .alignment(Alignment::Center)
-                    .position(Position::Top)
-            )
-            .border_set(border::ROUNDED);
-        let inner_right_title = Title::from(" Editor ".green().bold());
-        let inner_right_block = Block::bordered()
-            .title(
-                inner_right_title
-                    .alignment(Alignment::Right)
-                    .position(Position::Top)
-            )
-            .border_set(border::ROUNDED);
-
-
-        frame.render_widget(
-            Paragraph::new("outer 0")
-                .centered()
-                .block(outer_block)
-            ,
-            outer_layout[0],
-        );
-
-        let items: Vec<ListItem> = self
-            .hosts
-            .iter()
-            .enumerate()
-            .map(|(i, item)| item.to_list_item(i))
-            .collect();
-
-        let list = List::new(items)
-            .block(inner_left_block)
-            .style(Style::default().fg(Color::Blue))
-            .highlight_style(Style::default().add_modifier(Modifier::SLOW_BLINK))
-            .highlight_symbol(">>")
-            .repeat_highlight_symbol(true)
-            .direction(ListDirection::TopToBottom);
-        frame.render_widget(
-            list,
-            inner_layout[0],
-        );
-        frame.render_widget(
-            Paragraph::new("inner 1")
-                .centered()
-                .block(inner_right_block),
-            inner_layout[1],
-        );
+    fn render_frame(&mut self, frame: &mut Frame) {
+        frame.render_widget(self, frame.area());
     }
 
     fn handler_events(&mut self) -> io::Result<()> {
@@ -170,7 +89,87 @@ impl App<'_> {
     fn increment_counter(&mut self) {
         self.counter += 1;
     }
+
     fn exit(&mut self) {
         self.exit = true;
+    }
+}
+
+impl Widget for &mut App<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let outer_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(100)])
+            .flex(Flex::Center)
+            .split(area);
+
+        let inner_layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(vec![Constraint::Percentage(20), Constraint::Percentage(80)])
+            .vertical_margin(1)
+            .horizontal_margin(1)
+            .flex(Flex::Start)
+            .split(outer_layout[0]);
+
+        self.render_container(outer_layout[0], buf);
+        self.render_left_container(inner_layout[0], buf);
+        self.render_right_container(inner_layout[1], buf);
+    }
+}
+
+impl App<'_> {
+    fn render_left_container(&mut self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from(" Host ".green().bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Center).position(Position::Top))
+            .border_set(border::ROUNDED);
+
+        let items: Vec<ListItem> = self
+            .hosts
+            .iter()
+            .enumerate()
+            .map(|(i, item)| item.to_list_item(i))
+            .collect();
+
+        let list = List::new(items)
+            .block(block)
+            .style(Style::default().fg(Color::Blue))
+            .highlight_style(Style::default().add_modifier(Modifier::SLOW_BLINK))
+            .highlight_symbol(">>")
+            .repeat_highlight_symbol(true)
+            .direction(ListDirection::TopToBottom);
+
+        StatefulWidget::render(list, area, buf, &mut self.state);
+    }
+
+    fn render_right_container(&self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from(" Editor ".green().bold());
+        let block = Block::bordered()
+            .title(title.alignment(Alignment::Right).position(Position::Top))
+            .border_set(border::ROUNDED);
+
+        Paragraph::new("inner 1")
+            .centered()
+            .block(block)
+            .render(area, buf);
+    }
+
+    fn render_container(&self, area: Rect, buf: &mut Buffer) {
+        let outer_title = Title::from("  SSH Config  ".green().bold());
+        let outer_block = Block::bordered()
+            .title(
+                outer_title
+                    .alignment(Alignment::Center)
+                    .position(Position::Top),
+            )
+            .border_set(border::ROUNDED);
+
+        Paragraph::new("outer 0")
+            .centered()
+            .block(outer_block)
+            .render(area, buf);
     }
 }
