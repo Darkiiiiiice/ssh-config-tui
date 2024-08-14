@@ -6,18 +6,58 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Rect, Layout, Direction, Flex, Constraint};
 use ratatui::prelude::{Color, Line, Modifier, Style, Stylize, Text, Widget};
 use ratatui::symbols::border;
-use ratatui::widgets::{Block, List, ListDirection, Paragraph};
+use ratatui::widgets::{Block, List, ListDirection, ListItem, Paragraph};
 use ratatui::widgets::block::{Position, Title};
 use crate::tui::TUI;
 
+
 #[derive(Debug, Default)]
-pub struct App {
+struct HostItem<'a> {
+    name: &'a str,
+    domain: &'a str,
+}
+
+impl<'a> HostItem<'a> {
+    fn new(name: &'a str, domain: &'a str) -> Self {
+        Self {
+            name,
+            domain,
+        }
+    }
+
+    fn to_list_item(&self, index: usize) -> ListItem {
+        ListItem::new(
+            Line::styled(format!(" ✓ {}", self.name), Color::Red)
+        )
+    }
+}
+
+impl<'a> From<&(&'a str, &'a str)> for HostItem<'a> {
+    fn from((name, domain): &(&'a str, &'a str)) -> Self {
+        Self {
+            name,
+            domain,
+        }
+    }
+}
+
+
+#[derive(Debug, Default)]
+pub struct App<'a> {
     counter: u8,
+    hosts: Vec<HostItem<'a>>,
     exit: bool,
 }
 
-impl App {
+impl App<'_> {
     pub fn run(&mut self, terminal: &mut TUI) -> io::Result<()> {
+        let items = vec![
+            HostItem::new("Github", "github.com"),
+            HostItem::new("Github", "github.com"),
+        ];
+
+        self.hosts.extend(items);
+
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
             self.handler_events()?;
@@ -56,7 +96,7 @@ impl App {
         let inner_left_block = Block::bordered()
             .title(
                 inner_left_title
-                .alignment(Alignment::Center)
+                    .alignment(Alignment::Center)
                     .position(Position::Top)
             )
             .border_set(border::ROUNDED);
@@ -70,41 +110,37 @@ impl App {
             .border_set(border::ROUNDED);
 
 
-        let title = Title::from(" SSH Config ".green().bold());
-        let instractions = Title::from(Line::from(vec![
-            "Decrement".into(),
-            "<Left>".blue().bold(),
-            "Increment".into(),
-            "<Right>".yellow().bold(),
-            "Quit".into(),
-            "<Q>".red().bold(),
-        ]));
-
         frame.render_widget(
             Paragraph::new("outer 0")
                 .centered()
                 .block(outer_block)
             ,
-            outer_layout[0]
+            outer_layout[0],
         );
 
-        let items = ["Item 1", "Item 2", "Item 3"];
+        let items: Vec<ListItem> = self
+            .hosts
+            .iter()
+            .enumerate()
+            .map(|(i, item)| item.to_list_item(i))
+            .collect();
+
         let list = List::new(items)
             .block(inner_left_block)
             .style(Style::default().fg(Color::Blue))
-            .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+            .highlight_style(Style::default().add_modifier(Modifier::SLOW_BLINK))
             .highlight_symbol(">>")
             .repeat_highlight_symbol(true)
             .direction(ListDirection::TopToBottom);
         frame.render_widget(
             list,
-            inner_layout[0]
+            inner_layout[0],
         );
         frame.render_widget(
             Paragraph::new("inner 1")
                 .centered()
                 .block(inner_right_block),
-            inner_layout[1]
+            inner_layout[1],
         );
     }
 
