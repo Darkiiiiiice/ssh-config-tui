@@ -24,7 +24,7 @@ impl<'a> HostItem<'a> {
     }
 
     fn to_list_item(&self, index: usize) -> ListItem {
-        ListItem::new(Line::styled(format!(" ✓ {}", self.name), Color::Red))
+        ListItem::new(Line::styled(format!("{}", self.name), Color::Red))
     }
 }
 
@@ -39,6 +39,7 @@ pub struct App<'a> {
     counter: u8,
     state: ListState,
     hosts: Vec<HostItem<'a>>,
+    last_selected: Option<usize>,
     exit: bool,
 }
 
@@ -46,10 +47,18 @@ impl App<'_> {
     pub fn run(&mut self, terminal: &mut TUI) -> io::Result<()> {
         let items = vec![
             HostItem::new("Github", "github.com"),
+            HostItem::new("DevCloud", "github.com"),
+            HostItem::new("Staging", "github.com"),
+            HostItem::new("QaCloud", "github.com"),
+            HostItem::new("TestBM", "github.com"),
+            HostItem::new("Github", "github.com"),
+            HostItem::new("Github", "github.com"),
+            HostItem::new("Github", "github.com"),
             HostItem::new("Github", "github.com"),
         ];
 
         self.hosts.extend(items);
+        self.state.select_first();
 
         while !self.exit {
             terminal.draw(|frame| self.render_frame(frame))?;
@@ -78,8 +87,51 @@ impl App<'_> {
             KeyCode::Left => self.decrement_counter(),
             KeyCode::Right => self.increment_counter(),
             KeyCode::Char('q') => self.exit(),
+            // KeyCode::Char('h') | Left => self.items.unselect(),
+            KeyCode::Char('j') => self.next(),
+            KeyCode::Char('k') => self.prev(),
+            // KeyCode::Char('l') | Right | Enter => self.change_status(),
+            KeyCode::Char('g') => self.go_top(),
+            KeyCode::Char('G') => self.go_bottom(),
             _ => {}
         }
+    }
+
+    fn go_top(&mut self) {
+        self.state.select_first()
+    }
+
+    fn go_bottom(&mut self) {
+        self.state.select_last()
+    }
+
+    fn next(&mut self) {
+
+        match self.state.selected() {
+            Some(i) => {
+                if i >= self.hosts.len() - 1 {
+                    self.state.select_first();
+                } else {
+                    self.state.select_next();
+                }
+            }
+            None => self.state.select_first(),
+        };
+    }
+
+    fn prev(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i <= 0 {
+                    self.hosts.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => self.hosts.len() - 1,
+        };
+        self.state.select(Some(i))
+
     }
 
     fn decrement_counter(&mut self) {
@@ -97,8 +149,8 @@ impl App<'_> {
 
 impl Widget for &mut App<'_> {
     fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let outer_layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -138,7 +190,7 @@ impl App<'_> {
             .block(block)
             .style(Style::default().fg(Color::Blue))
             .highlight_style(Style::default().add_modifier(Modifier::SLOW_BLINK))
-            .highlight_symbol(">>")
+            .highlight_symbol(">>> ")
             .repeat_highlight_symbol(true)
             .direction(ListDirection::TopToBottom);
 
